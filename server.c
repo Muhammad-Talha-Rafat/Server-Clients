@@ -8,7 +8,15 @@
 #define PORT 8080
 #define BUFFER_SIZE 1000
 
-void INIT(int *server, int *client, struct sockaddr_in *address) {
+struct USER {
+    int sock;
+    char username[100];
+    char password[100];
+    int authorized;
+};
+
+
+void INIT(int *server, struct sockaddr_in *address) {
 
     *server = socket(AF_INET, SOCK_STREAM, 0);
     if (*server < 0) {
@@ -22,7 +30,7 @@ void INIT(int *server, int *client, struct sockaddr_in *address) {
 
     socklen_t addrlen = sizeof(*address);
 
-    if (bind(*server, (struct sockaddr*)address, &addrlen) < 0) {
+    if (bind(*server, (struct sockaddr*)address, addrlen) < 0) {
         perror("server error: server couldn't bind\n");
         close(*server);
         exit(EXIT_FAILURE);
@@ -30,13 +38,6 @@ void INIT(int *server, int *client, struct sockaddr_in *address) {
 
     if (listen(*server, 3) < 0) {
         perror("server error: server couldn't listen\n");
-        close(*server);
-        exit(EXIT_FAILURE);
-    }
-
-    *client = accept(*server, (struct sockaddr*)address, &addrlen);
-    if (*client < 0) {
-        perror("server error: couldn't accept client\n");
         close(*server);
         exit(EXIT_FAILURE);
     }
@@ -87,52 +88,64 @@ void LIST(int *client) {
     printf("server > %s\n", buffer);
 }
 
-struct USER {
-    int sock;
-    char username[100];
-    char password[100];
-    int authorized;
-};
+void HANDLE_CLIENT(struct USER *client) {
+    client->authorized = 0;
+    char buffer[BUFFER_SIZE] = {0};
+
+    while (1) {
+        memset(buffer, 0, sizeof(buffer));
+        int bytes = read(client->sock, buffer, BUFFER_SIZE);
+        if (bytes <= 0) {
+            printf("client error: connection lost\n");
+            break;
+        }
+
+        if (strcmp(buffer, "EXIT") == 0) {
+            printf("%s disconnected\n", client->username[0] ? client->username : "client");
+            break;
+        }
+
+        if (!client->authorized) {
+            char action[100];
+            sscanf(buffer, "%s %s %s", action, client->username, client->password);
+            client->authorized = AUTHORIZE(action, client->username, client->password);
+            if (client->authorized) {
+                send(client->sock, "authorized", strlen("authorized"), 0);
+                printf("Welcome %s!\n", client->username);
+            }
+            else send(client->sock, "invalid credentials", strlen("invalid credentials"), 0);
+            continue;
+        }
+
+
+        if (strcmp(buffer, "UPLOAD") == 0) UPLOAD(&client->sock);
+        else if (strcmp(buffer, "DOWNLOAD") == 0) DOWNLOAD(&client->sock);
+        else if (strcmp(buffer, "DELETE") == 0) DELETE(&client->sock);
+        else if (strcmp(buffer, "LIST") == 0) LIST(&client->sock);
+        else {
+            send(client->sock, "invalid command", strlen("invalid command"), 0);
+            printf("%s < invalid command\n", client->username);
+        }
+    }
+    close(client->sock);
+}
 
 int main() {
     int server;
-    struct USER client;
     struct sockaddr_in address;
 
-    INIT(&server, &client.sock, &address);
-    client.authorized = 0;
+    INIT(&server, &address);
 
     while (1) {
-        char buffer[BUFFER_SIZE] = {0};
-        read(client.sock, buffer, BUFFER_SIZE);
-
-        if (strcmp(buffer, "EXIT") == 0) {
-            printf("%s disconnected\n", client.username);
+        struct USER client;
+        socklen_t addrlen = sizeof(address);
+        client.sock = accept(server, (struct sockaddr*)&address, &addrlen);
+        if (client.sock < 0) {
+            perror("server error: couldn't accept client\n");
             continue;
         }
 
-
-        if (!client.authorized) {
-            char action[100];
-            sscanf(buffer, "%s %s %s", action, client.username, client.password);
-            client.authorized = AUTHORIZE(action, client.username, client.password);
-            if (client.authorized) {
-                send(client.sock, "authorized", strlen("authorized"), 0);
-                printf("Welcome %s!\n", client.username);
-            }
-            else send(client.sock, "invalid credentials", strlen("invalid credentials"), 0);
-            continue;
-        }
-
-
-        if (strcmp(buffer, "UPLOAD") == 0) UPLOAD(&client.sock);
-        else if (strcmp(buffer, "DOWNLOAD") == 0) DOWNLOAD(&client.sock);
-        else if (strcmp(buffer, "DELETE") == 0) DELETE(&client.sock);
-        else if (strcmp(buffer, "LIST") == 0) LIST(&client.sock);
-        else {
-            send(client.sock, "invalid command", strlen("invalid command"), 0);
-            printf("%s < invalid command\n", client.username);
-        }
+        HANDLE_CLIENT(&client);
     }
 
     close(server);
