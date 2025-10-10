@@ -36,7 +36,7 @@ int main() {
     }
 
     while (1) {
-        char message[BUFFER_SIZE];
+        char message[BUFFER_SIZE], username[100];
         char buffer[BUFFER_SIZE] = {0};
 
         if (!authorized) {
@@ -46,14 +46,17 @@ int main() {
 
             if (strcmp(message, "EXIT") == 0) break;
 
-            char action[100], username[100], password[100];
+            char action[100], password[100];
             int parts = sscanf(message, "%s %s %s", action, username, password);
 
             if (parts == 3 && (strcmp(action, "login") == 0 || strcmp(action, "signup") == 0)) {
                 send(server, message, strlen(message), 0);
                 read(server, buffer, BUFFER_SIZE);
-                if (strcmp(buffer, "authorized") == 0) authorized++;
-                else printf("auth error: invalid credentials!\n");
+                if (strcmp(buffer, "authorized") == 0) authorized = 1;
+                else {
+                    printf("auth error: %s!\n", buffer);
+                    continue;
+                }
             }
             else {
                 printf("client error: invalid format\n");
@@ -61,7 +64,7 @@ int main() {
             }
         }
 
-        printf("client < ");
+        printf("%s > ", username);
         fgets(message, BUFFER_SIZE, stdin);
         message[strcspn(message, "\n")] = '\0';
 
