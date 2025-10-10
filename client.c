@@ -49,9 +49,11 @@ int main() {
             char action[100], username[100], password[100];
             int parts = sscanf(message, "%s %s %s", action, username, password);
 
-            if (parts == 3 && (strcmp(action, "login") == 0) || strcmp(action, "signup") == 0) {
+            if (parts == 3 && (strcmp(action, "login") == 0 || strcmp(action, "signup") == 0)) {
                 send(server, message, strlen(message), 0);
-                authorized++;
+                read(server, buffer, BUFFER_SIZE);
+                if (strcmp(buffer, "authorized") == 0) authorized++;
+                else printf("auth error: invalid credentials!\n");
             }
             else {
                 printf("client error: invalid format\n");

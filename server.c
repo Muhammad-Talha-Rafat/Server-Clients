@@ -40,6 +40,29 @@ void INIT(int *server, int *client, struct sockaddr_in *address, socklen_t *addr
     }
 }
 
+int AUTHORIZE(char* action, char* username, char* password) {
+    if (strcmp(action, "login") == 0) {
+        char line[256], u[100], p[100];
+        FILE *file = fopen("users.txt", "r");
+        while (fgets(line, sizeof(line), file)) {
+            if (sscanf(line, "username: %99[^,], password: %99s", u, p) == 2) {
+                if (strcmp(u, username) == 0 && strcmp(p, password) == 0) {
+                    fclose(file);
+                    return 1;
+                }
+            }
+        }
+        fclose(file);
+    }
+    else {
+        FILE *file = fopen("users.txt", "a");
+        fprintf(file, "username: %s, password: %s\n", username, password);
+        fclose(file);
+        return 1;
+    }
+    return 0;
+}
+
 void UPLOAD(int *client) {
     char* buffer = "UPLOAD";
     send(*client, buffer, strlen(buffer), 0);
@@ -64,21 +87,46 @@ void LIST(int *client) {
     printf("server > %s\n", buffer);
 }
 
+struct USER {
+    int sock;
+    char username[100];
+    char password[100];
+    int authorized;
+};
+
 int main() {
-    int server, client;
+    int server;
+    struct USER client;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
 
-    INIT(&server, &client, &address, &addrlen);
+    INIT(&server, &client.sock, &address, &addrlen);
+    client.authorized = 0;
 
     while (1) {
         char buffer[BUFFER_SIZE] = {0};
-        read(client, buffer, BUFFER_SIZE);
+        read(client.sock, buffer, BUFFER_SIZE);
 
-        if (strcmp(buffer, "UPLOAD") == 0) UPLOAD(&client);
-        else if (strcmp(buffer, "DOWNLOAD") == 0) DOWNLOAD(&client);
-        else if (strcmp(buffer, "DELETE") == 0) DELETE(&client);
-        else if (strcmp(buffer, "LIST") == 0) LIST(&client);
+        if (strcmp(buffer, "EXIT") == 0) {
+            printf("client disconnected\n");
+            break;
+        }
+
+        while (!client.authorized) {
+            char action[100];
+            sscanf(buffer, "%s %s %s", action, client.username, client.password);
+            client.authorized = AUTHORIZE(action, client.username, client.password);
+            if (client.authorized) {
+                send(client.sock, "authorized", strlen("authorized"), 0);
+                printf("Welcome %s!\n", client.username);
+                break;
+            }
+        }
+
+        if (strcmp(buffer, "UPLOAD") == 0) UPLOAD(&client.sock);
+        else if (strcmp(buffer, "DOWNLOAD") == 0) DOWNLOAD(&client.sock);
+        else if (strcmp(buffer, "DELETE") == 0) DELETE(&client.sock);
+        else if (strcmp(buffer, "LIST") == 0) LIST(&client.sock);
         else {
             char* message = "invalid command";
             if (strcmp(buffer, "EXIT") == 0) {
@@ -86,7 +134,7 @@ int main() {
                 printf("server > %s\n", message);
                 break;
             }
-            send(client, message, strlen(message), 0);
+            send(client.sock, message, strlen(message), 0);
             printf("server > %s\n", message);
         }
     }
