@@ -8,10 +8,11 @@
 #define PORT 8080
 #define BUFFER_SIZE 1000
 
+
 int main() {
     int server = 0;
     struct sockaddr_in address;
-    char message[BUFFER_SIZE];
+    int authorized = 0;
 
     server = socket(AF_INET, SOCK_STREAM, 0);
     if (server < 0) {
@@ -35,7 +36,28 @@ int main() {
     }
 
     while (1) {
+        char message[BUFFER_SIZE];
         char buffer[BUFFER_SIZE] = {0};
+
+        if (!authorized) {
+            printf("authorize > ");
+            fgets(message, BUFFER_SIZE, stdin);
+            message[strcspn(message, "\n")] = '\0';
+
+            if (strcmp(message, "EXIT") == 0) break;
+
+            char action[100], username[100], password[100];
+            int parts = sscanf(message, "%s %s %s", action, username, password);
+
+            if (parts == 3 && (strcmp(action, "login") == 0) || strcmp(action, "signup") == 0) {
+                send(server, message, strlen(message), 0);
+                authorized++;
+            }
+            else {
+                printf("client error: invalid format\n");
+                continue;
+            }
+        }
 
         printf("client < ");
         fgets(message, BUFFER_SIZE, stdin);
