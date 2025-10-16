@@ -44,7 +44,7 @@ int main() {
             fgets(message, BUFFER_SIZE, stdin);
             message[strcspn(message, "\n")] = '\0';
 
-            if (strcmp(message, "EXIT") == 0) break;
+            if (strcmp(message, "EXIT") == 0 || strcmp(message, "exit") == 0) break;
 
             char action[100], password[100];
             int parts = sscanf(message, "%s %s %s", action, username, password);

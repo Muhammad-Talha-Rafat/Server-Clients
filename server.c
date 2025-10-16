@@ -15,6 +15,12 @@ struct USER {
     int authorized;
 };
 
+struct TASK {
+    char client[100];
+    char command[100];
+    char filename[100];
+};
+
 
 void INIT(int *server, struct sockaddr_in *address) {
 
@@ -100,7 +106,7 @@ void HANDLE_CLIENT(struct USER *client) {
             break;
         }
 
-        if (strcmp(buffer, "EXIT") == 0) {
+        if (strcmp(buffer, "EXIT") == 0 || strcmp(buffer, "exit") == 0) {
             printf("%s disconnected\n", client->username[0] ? client->username : "client");
             break;
         }
