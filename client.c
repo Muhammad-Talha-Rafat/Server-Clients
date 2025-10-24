@@ -8,7 +8,6 @@
 #define PORT 8080
 #define BUFFER_SIZE 1000
 
-
 int main() {
     int server = 0;
     struct sockaddr_in address;
@@ -69,7 +68,7 @@ int main() {
         message[strcspn(message, "\n")] = '\0';
 
         send(server, message, strlen(message), 0);
-        if (strcmp(message, "EXIT") == 0) break;
+        if (strcmp(message, "EXIT") == 0 || strcmp(message, "exit") == 0) break;
 
         recv(server, buffer, sizeof(buffer), 0);
         printf("%s\n", buffer);
