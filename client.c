@@ -70,6 +70,9 @@ int main() {
 
         send(server, message, strlen(message), 0);
         if (strcmp(message, "EXIT") == 0) break;
+
+        recv(server, buffer, sizeof(buffer), 0);
+        printf("%s\n", buffer);
     }
 
     close(server);
