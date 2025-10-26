@@ -11,8 +11,8 @@
 
 #define PORT 8080
 #define BUFFER_SIZE 1000
-#define MAX_TASK_LIMIT 2
-#define MAX_CLIENT_LIMIT 1
+#define MAX_TASK_LIMIT 5
+#define MAX_CLIENT_LIMIT 2
 
 struct USER {
     int sock;
