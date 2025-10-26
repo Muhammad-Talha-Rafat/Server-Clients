@@ -21,24 +21,22 @@ This project implements a simple server-client file management system, similar t
 
 ```
 Server-Clients
-│   Makefile
-│   server.c
-│   client.c
-│
-└───assets
-    │   users.txt
+├── Makefile
+├── server.c
+├── client.c
+└── assets
+    ├── users.txt
     │
-    ├───files
-    │       river.txt
-    │       ... (other files)
-    │
-    └───users
-        ├───Talha
-        │       forest.txt
-        │       winter.txt
+    ├── files
+    │   ├── river.txt
+    │   └── ... (+9 other files)
+    └── users
+        ├── Talha
+        │   ├── forest.txt
+        │   └── winter.txt
         │
         └───Ronaldo
-                letter.txt
+            └── letter.txt
 ```
 
 ---
@@ -115,4 +113,3 @@ server > File successfully deleted
 - The server must be started **before** any clients can connect.
 - The server enforces a maximum of **2 active clients** at a time. Additional clients are temporarily rejected with a queue message.
 - The server can handle **up to 5 tasks** in the task queue. If the queue is full, clients must wait before their tasks are processed.
-- This project is intended for educational purposes to demonstrate basic client-server communication, multi-threading, and file management in C.
