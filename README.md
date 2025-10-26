@@ -26,7 +26,6 @@ Server-Clients
 ├── client.c
 └── assets
     ├── users.txt
-    │
     ├── files
     │   ├── river.txt
     │   └── ... (+9 other files)
@@ -34,7 +33,6 @@ Server-Clients
         ├── Talha
         │   ├── forest.txt
         │   └── winter.txt
-        │
         └───Ronaldo
             └── letter.txt
 ```
