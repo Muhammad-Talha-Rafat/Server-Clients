@@ -10,7 +10,7 @@
 
 #define PORT 8080
 #define BUFFER_SIZE 1000
-#define MAX_TASK_LIMIT 10
+#define MAX_TASK_LIMIT 2
 
 struct USER {
     int sock;
@@ -34,6 +34,7 @@ struct TASK_QUEUE {
 int server;
 struct sockaddr_in address;
 struct TASK_QUEUE tasks = { .front = 0, .rear = 0 };
+pthread_mutex_t queue_mutex;
 
 int isFull(struct TASK_QUEUE* queue) {
     return queue->rear == MAX_TASK_LIMIT;
@@ -289,16 +290,25 @@ void HANDLE_CLIENT(struct USER* client) {
 void* CLIENT_HANDLER(void* arg) {
     struct USER* client = (struct USER*)arg;
     HANDLE_CLIENT(client);
-    close(client->sock);
     free(client);
     return NULL;
 }
 
-void TASK_PROCESSOR() {
+void* TASK_PROCESSOR(void* arg) {
     while (1) {
         struct TASK task;
+        int notEmpty = 0;
+
+        pthread_mutex_lock(&queue_mutex);
+
         if (!isEmpty(&tasks)) {
             dequeue(&tasks, &task);
+            notEmpty = 1;
+        }
+
+        pthread_mutex_unlock(&queue_mutex);
+
+        if (notEmpty) {
             if (strcmp(task.command, "LIST") == 0)
                 LIST(task.client);
             else if (strcmp(task.command, "UPLOAD") == 0)
@@ -307,14 +317,17 @@ void TASK_PROCESSOR() {
                 DOWNLOAD(task.client, &task);
             else if (strcmp(task.command, "DELETE") == 0)
                 DELETE(task.client, &task);
+            sleep(5);
         }
-        usleep(100000);
+        else usleep(100000);
     }
+    return NULL;
 }
 
 int main() {
 
     INIT(&server, &address);
+    pthread_mutex_init(&queue_mutex, NULL);
 
     pthread_t task_thread;
     pthread_create(&task_thread, NULL, (void*)TASK_PROCESSOR, NULL);
@@ -336,5 +349,6 @@ int main() {
     }
 
     close(server);
+    pthread_mutex_destroy(&queue_mutex);
     return 0;    
 }
