@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <signal.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
@@ -18,6 +19,8 @@ int main() {
         perror("client error: socket couldn't create");
         exit(EXIT_FAILURE);
     }
+
+    signal(SIGPIPE, SIG_IGN);
 
     address.sin_family = AF_INET;
     address.sin_port = htons(PORT);
@@ -52,13 +55,17 @@ int main() {
                 send(server, message, strlen(message), 0);
                 read(server, buffer, BUFFER_SIZE);
                 if (strcmp(buffer, "authorized") == 0) authorized = 1;
+                else if (strncmp(buffer, "server", 6) == 0) {
+                    printf("%s\n", buffer);
+                    break;
+                }
                 else {
                     printf("auth error: %s!\n", buffer);
                     continue;
                 }
             }
             else {
-                printf("client error: invalid format\n");
+                printf("auth error: invalid format\n");
                 continue;
             }
         }

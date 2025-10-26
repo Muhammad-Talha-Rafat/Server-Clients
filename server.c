@@ -7,10 +7,12 @@
 #include <dirent.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <semaphore.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 1000
 #define MAX_TASK_LIMIT 2
+#define MAX_CLIENT_LIMIT 1
 
 struct USER {
     int sock;
@@ -35,6 +37,7 @@ int server;
 struct sockaddr_in address;
 struct TASK_QUEUE tasks = { .front = 0, .rear = 0 };
 pthread_mutex_t queue_mutex;
+sem_t clients;
 
 int isFull(struct TASK_QUEUE* queue) {
     return queue->rear == MAX_TASK_LIMIT;
@@ -259,7 +262,10 @@ void HANDLE_CLIENT(struct USER* client) {
                 printf("%s < %s\n", client->username, message);
             }
             else {
-                if (enqueue(&tasks, task) == -1) {
+                pthread_mutex_lock(&queue_mutex);
+                int temp = enqueue(&tasks, task);
+                pthread_mutex_unlock(&queue_mutex);
+                if (temp == -1) {
                     snprintf(message, sizeof(message), "server > Queue is full, please wait for a bit");
                     send(client->sock, message, strlen(message), 0);
                 }
@@ -272,7 +278,10 @@ void HANDLE_CLIENT(struct USER* client) {
                 printf("%s < %s\n", client->username, message);
             }
             else if (strcmp(task.command, "UPLOAD") == 0 || strcmp(task.command, "DOWNLOAD") == 0 || strcmp(task.command, "DELETE") == 0) {
-                if (enqueue(&tasks, task) == -1) {
+                pthread_mutex_lock(&queue_mutex);
+                int temp = enqueue(&tasks, task);
+                pthread_mutex_unlock(&queue_mutex);
+                if (temp == -1) {
                     snprintf(message, sizeof(message), "server > Queue is full, please wait for a bit");
                     send(client->sock, message, strlen(message), 0);
                 }
@@ -291,6 +300,7 @@ void* CLIENT_HANDLER(void* arg) {
     struct USER* client = (struct USER*)arg;
     HANDLE_CLIENT(client);
     free(client);
+    sem_post(&clients);
     return NULL;
 }
 
@@ -328,6 +338,7 @@ int main() {
 
     INIT(&server, &address);
     pthread_mutex_init(&queue_mutex, NULL);
+    sem_init(&clients, 0, MAX_CLIENT_LIMIT);
 
     pthread_t task_thread;
     pthread_create(&task_thread, NULL, (void*)TASK_PROCESSOR, NULL);
@@ -343,6 +354,15 @@ int main() {
             continue;
         }
 
+        if (sem_trywait(&clients) == -1) {
+            char message[100];
+            snprintf(message, sizeof(message), "server error > client queue is full, come back after a while");
+            send(client->sock, message, strlen(message), 0);
+            close(client->sock);
+            free(client);
+            continue;
+        }
+
         pthread_t client_task_thread;
         pthread_create(&client_task_thread, NULL, CLIENT_HANDLER, client);
         pthread_detach(client_task_thread);
@@ -350,5 +370,6 @@ int main() {
 
     close(server);
     pthread_mutex_destroy(&queue_mutex);
+    sem_destroy(&clients);
     return 0;    
 }
