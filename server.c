@@ -6,9 +6,11 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 1000
+#define MAX_TASK_LIMIT 10
 
 struct USER {
     int sock;
@@ -18,10 +20,41 @@ struct USER {
 };
 
 struct TASK {
-    char client[100];
+    struct USER* client;
     char command[100];
     char filename[100];
 };
+
+struct TASK_QUEUE {
+    int front;
+    int rear;
+    struct TASK list[MAX_TASK_LIMIT];
+};
+
+int server;
+struct sockaddr_in address;
+struct TASK_QUEUE tasks = { .front = 0, .rear = 0 };
+
+int isFull(struct TASK_QUEUE* queue) {
+    return queue->rear == MAX_TASK_LIMIT;
+}
+
+int isEmpty(struct TASK_QUEUE* queue) {
+    return queue->front == queue->rear;
+}
+
+int enqueue(struct TASK_QUEUE* queue, struct TASK item) {
+    if (isFull(queue)) return -1;
+    queue->list[queue->rear++] = item;
+    return 1;
+}
+
+int dequeue(struct TASK_QUEUE* queue, struct TASK* item) {
+    if (isEmpty(queue)) return -1;
+    *item = queue->list[queue->front++];
+    if (queue->front == queue->rear) queue->front = queue->rear = 0;
+    return 1;
+}
 
 void INIT(int* server, struct sockaddr_in* address) {
 
@@ -179,6 +212,7 @@ void LIST(struct USER* client) {
     closedir(dir);
 
     send(client->sock, buffer, strlen(buffer), 0);
+    memset(buffer, 0, sizeof(buffer));
 }
 
 void HANDLE_CLIENT(struct USER* client) {
@@ -212,30 +246,38 @@ void HANDLE_CLIENT(struct USER* client) {
 
         struct TASK task;
         char message[100] = {0};
-        strcpy(task.client, client->username);
+        task.client = client;
         memset(task.filename, 0, sizeof(task.filename));
         memset(message, 0, sizeof(message));
         sscanf(buffer, "%99s %99[^\n]", task.command, task.filename);
 
         if (strcmp(task.command, "LIST") == 0) {
             if (task.filename[0] != '\0') {
-                snprintf(message, sizeof(message), "server: invalid format");
+                snprintf(message, sizeof(message), "server > invalid format");
                 send(client->sock, message, strlen(message), 0);
                 printf("%s < %s\n", client->username, message);
             }
-            else LIST(client);
+            else {
+                if (enqueue(&tasks, task) == -1) {
+                    snprintf(message, sizeof(message), "server > Queue is full, please wait for a bit");
+                    send(client->sock, message, strlen(message), 0);
+                }
+            }
         }
         else {
             if (task.filename[0] == '\0' || strchr(task.filename, ' ') != NULL) {
-                snprintf(message, sizeof(message), "server: invalid format");
+                snprintf(message, sizeof(message), "server > invalid format");
                 send(client->sock, message, strlen(message), 0);
                 printf("%s < %s\n", client->username, message);
             }
-            else if (strcmp(task.command, "UPLOAD") == 0) UPLOAD(client, &task);
-            else if (strcmp(task.command, "DOWNLOAD") == 0) DOWNLOAD(client, &task);
-            else if (strcmp(task.command, "DELETE") == 0) DELETE(client, &task);
+            else if (strcmp(task.command, "UPLOAD") == 0 || strcmp(task.command, "DOWNLOAD") == 0 || strcmp(task.command, "DELETE") == 0) {
+                if (enqueue(&tasks, task) == -1) {
+                    snprintf(message, sizeof(message), "server > Queue is full, please wait for a bit");
+                    send(client->sock, message, strlen(message), 0);
+                }
+            }
             else {
-                snprintf(message, sizeof(message), "server: invalid command");
+                snprintf(message, sizeof(message), "server > invalid command");
                 send(client->sock, message, strlen(message), 0);
                 printf("%s < %s\n", client->username, message);
             }
@@ -244,22 +286,53 @@ void HANDLE_CLIENT(struct USER* client) {
     close(client->sock);
 }
 
+void* CLIENT_HANDLER(void* arg) {
+    struct USER* client = (struct USER*)arg;
+    HANDLE_CLIENT(client);
+    close(client->sock);
+    free(client);
+    return NULL;
+}
+
+void TASK_PROCESSOR() {
+    while (1) {
+        struct TASK task;
+        if (!isEmpty(&tasks)) {
+            dequeue(&tasks, &task);
+            if (strcmp(task.command, "LIST") == 0)
+                LIST(task.client);
+            else if (strcmp(task.command, "UPLOAD") == 0)
+                UPLOAD(task.client, &task);
+            else if (strcmp(task.command, "DOWNLOAD") == 0)
+                DOWNLOAD(task.client, &task);
+            else if (strcmp(task.command, "DELETE") == 0)
+                DELETE(task.client, &task);
+        }
+        usleep(100000);
+    }
+}
+
 int main() {
-    int server;
-    struct sockaddr_in address;
 
     INIT(&server, &address);
 
+    pthread_t task_thread;
+    pthread_create(&task_thread, NULL, (void*)TASK_PROCESSOR, NULL);
+
     while (1) {
-        struct USER client;
+        struct USER* client = malloc(sizeof(struct USER));
         socklen_t addrlen = sizeof(address);
-        client.sock = accept(server, (struct sockaddr*)&address, &addrlen);
-        if (client.sock < 0) {
+
+        client->sock = accept(server, (struct sockaddr*)&address, &addrlen);
+        if (client->sock < 0) {
             perror("server error: couldn't accept client\n");
+            free(client);
             continue;
         }
 
-        HANDLE_CLIENT(&client);
+        pthread_t client_task_thread;
+        pthread_create(&client_task_thread, NULL, CLIENT_HANDLER, client);
+        pthread_detach(client_task_thread);
     }
 
     close(server);
