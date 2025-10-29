@@ -46,8 +46,10 @@ Server-Clients
 
 Optional tools for debugging:
 
-- [Valgrind](https://valgrind.org/) – memory leak detection.
-- ThreadSanitizer (`-fsanitize=thread`) – detect race conditions.
+- Valgrind `--leak-check` – memory leak detection.
+- Valgrind `helgrind` – detect race conditions.
+
+**Note:** ThreadSanitizer (TSAN) was also attempted but not executed successfully due to compatibility constraints.
 
 ---
 
